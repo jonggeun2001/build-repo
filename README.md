@@ -14,15 +14,23 @@ NVIDIA Driver 470 (CUDA 11.4) 환경에서 폐쇄망 OpenShift에 배포하기 �
 
 이 레포지터리는 GitHub Actions를 통해 자동으로 빌드됩니다:
 
-- `main` 또는 `master` 브랜치에 push 시 자동 빌드
-- `Dockerfile` 또는 워크플로우 파일 변경 시 트리거
+- Git 태그 push 시 자동 빌드 (`v*` 형식)
 - 빌드된 이미지는 GitHub Container Registry (ghcr.io)에 저장
+
+### 빌드 방법
+
+```bash
+# 버전 태그 생성 및 푸시
+git tag v1.0
+git push origin v1.0
+
+# 결과: ghcr.io/jonggeun2001/llama-cpp-a100:v1.0-cuda11.4
+```
 
 ## 이미지 태그
 
-- `latest`: 최신 빌드 (기본 브랜치)
-- `cuda11.4-driver470`: CUDA 11.4 / Driver 470 특정 버전
-- `main-{sha}`: 커밋 SHA별 버전
+- `{version}-cuda11.4`: 특정 버전 (예: `v1.0-cuda11.4`)
+- `latest-cuda11.4`: 최신 빌드
 
 ## 사용 방법
 
@@ -30,12 +38,12 @@ NVIDIA Driver 470 (CUDA 11.4) 환경에서 폐쇄망 OpenShift에 배포하기 �
 
 ```bash
 # 공개 네트워크에서
-docker pull ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470
+docker pull ghcr.io/jonggeun2001/llama-cpp-a100:latest-cuda11.4
 
 # 폐쇄망 환경으로 전송
-docker save ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470 -o llama-cpp.tar
+docker save ghcr.io/jonggeun2001/llama-cpp-a100:latest-cuda11.4 -o llama-cpp-a100.tar
 # 파일을 폐쇄망으로 복사 후
-docker load -i llama-cpp.tar
+docker load -i llama-cpp-a100.tar
 ```
 
 ### 2. OpenShift에서 실행
@@ -59,7 +67,7 @@ spec:
     spec:
       containers:
       - name: llama-cpp
-        image: ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470
+        image: ghcr.io/jonggeun2001/llama-cpp-a100:latest-cuda11.4
         command: ["llama-server"]
         args:
           - "-m"
@@ -101,7 +109,7 @@ spec:
 docker run --rm -it --gpus all \
   -p 8080:8080 \
   -v /path/to/models:/app/models \
-  ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470 \
+  ghcr.io/jonggeun2001/llama-cpp-a100:latest-cuda11.4 \
   llama-server \
   -m /app/models/qwen3-model.gguf \
   --host 0.0.0.0 \
@@ -130,11 +138,11 @@ docker run --rm -it --gpus all \
 
 ### CUDA 버전 확인
 ```bash
-docker run --rm ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470 nvcc --version
+docker run --rm ghcr.io/jonggeun2001/llama-cpp-a100:latest-cuda11.4 nvcc --version
 ```
 
 ### llama.cpp 버전 확인
 ```bash
-docker run --rm ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470 \
+docker run --rm ghcr.io/jonggeun2001/llama-cpp-a100:latest-cuda11.4 \
   llama-server --version
 ```
