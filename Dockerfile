@@ -1,13 +1,11 @@
-# NVIDIA Driver 470 compatible (CUDA 11.4) for A100 GPU
-FROM nvidia/cuda:11.4.3-devel-ubuntu20.04
+# ============================================
+# Stage 1: Builder (CUDA devel for compilation)
+# ============================================
+FROM nvidia/cuda:11.4.3-devel-ubuntu20.04 AS builder
 
-# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
-ENV CUDA_HOME=/usr/local/cuda
-ENV PATH=${CUDA_HOME}/bin:${PATH}
-ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
 
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
@@ -16,24 +14,17 @@ RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install latest CMake (llama.cpp requires 3.18+)
+# Install CMake 3.28.1 (llama.cpp requires 3.18+)
 RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.28.1/cmake-3.28.1-linux-x86_64.sh && \
     chmod +x cmake-3.28.1-linux-x86_64.sh && \
     ./cmake-3.28.1-linux-x86_64.sh --skip-license --prefix=/usr/local && \
     rm cmake-3.28.1-linux-x86_64.sh
 
-# Note: This image expects pre-converted GGUF model files
-# For model conversion, use HuggingFace transformers separately:
-# https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF
-
-# Set working directory
+# Clone llama.cpp (shallow clone to reduce size)
 WORKDIR /app
-
-# Clone llama.cpp (separate layer for better caching)
-RUN git clone https://github.com/ggerganov/llama.cpp.git /app/llama.cpp
+RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /app/llama.cpp
 
 # Build llama.cpp with CUDA support for A100 (compute capability 8.0)
-# Use CUDA stub library for building without GPU
 WORKDIR /app/llama.cpp
 RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
     mkdir build && cd build && \
@@ -46,18 +37,33 @@ RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/lib
     cmake --build . --config Release -j$(nproc) && \
     rm /usr/local/cuda/lib64/stubs/libcuda.so.1
 
-# Create model directory
+# ============================================
+# Stage 2: Runtime (CUDA runtime, much smaller)
+# ============================================
+FROM nvidia/cuda:11.4.3-runtime-ubuntu20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
 RUN mkdir -p /app/models
 
+# Copy only built binaries and necessary libraries from builder
+COPY --from=builder /app/llama.cpp/build/bin/ /app/bin/
+COPY --from=builder /app/llama.cpp/build/ggml/src/libggml*.so* /app/lib/
+COPY --from=builder /app/llama.cpp/build/src/libllama.so* /app/lib/
+
 # Set environment variables
-ENV LLAMA_CPP_PATH=/app/llama.cpp
-ENV PATH=/app/llama.cpp/build/bin:${PATH}
+ENV PATH=/app/bin:${PATH}
+ENV LD_LIBRARY_PATH=/app/lib:${LD_LIBRARY_PATH}
 
 # Expose default llama.cpp server port
 EXPOSE 8080
 
-# Set working directory
-WORKDIR /app
-
-# Default command (can be overridden at runtime)
+# Default command
 CMD ["llama-server", "--help"]
