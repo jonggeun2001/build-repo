@@ -7,15 +7,13 @@ ENV CUDA_HOME=/usr/local/cuda
 ENV PATH=${CUDA_HOME}/bin:${PATH}
 ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
 
-# Install system dependencies and CMake 3.24+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     wget \
     curl \
     libcurl4-openssl-dev \
-    python3 \
-    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install latest CMake (llama.cpp requires 3.18+)
@@ -24,13 +22,9 @@ RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.28.1/cmake-3.2
     ./cmake-3.28.1-linux-x86_64.sh --skip-license --prefix=/usr/local && \
     rm cmake-3.28.1-linux-x86_64.sh
 
-# Install Python packages for model conversion (Qwen3 support)
-RUN pip3 install --no-cache-dir \
-    numpy \
-    torch \
-    transformers \
-    sentencepiece \
-    protobuf
+# Note: This image expects pre-converted GGUF model files
+# For model conversion, use HuggingFace transformers separately:
+# https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF
 
 # Set working directory
 WORKDIR /app

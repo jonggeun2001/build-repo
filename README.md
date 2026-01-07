@@ -6,7 +6,8 @@ NVIDIA Driver 470 (CUDA 11.4) 환경에서 폐쇄망 OpenShift에 배포하기 �
 
 - **CUDA 버전**: 11.4.3
 - **호환 드라이버**: NVIDIA Driver 470
-- **타겟 모델**: Qwen3
+- **타겟 GPU**: NVIDIA A100 (Compute Capability 8.0)
+- **타겟 모델**: Qwen3 (GGUF 형식)
 - **베이스 이미지**: nvidia/cuda:11.4.3-devel-ubuntu20.04
 
 ## 자동 빌드
@@ -83,14 +84,25 @@ spec:
 
 ### 3. 모델 파일 준비
 
-Qwen3 모델을 GGUF 형식으로 변환하여 볼륨에 저장:
+**중요**: 이 이미지는 사전 변환된 GGUF 모델 파일을 필요로 합니다.
+
+#### Qwen3 GGUF 모델 다운로드
 
 ```bash
-# 컨테이너 내부에서 모델 변환 (필요시)
-docker run --rm -it --gpus all \
-  -v /path/to/qwen3:/models \
-  ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470 \
-  /app/llama.cpp/convert.py /models/qwen3 --outtype f16
+# HuggingFace에서 GGUF 모델 다운로드
+wget https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf
+
+# 또는 다른 양자화 버전
+# - qwen2.5-7b-instruct-q8_0.gguf (높은 품질, 큰 용량)
+# - qwen2.5-7b-instruct-q4_k_m.gguf (균형, 권장)
+# - qwen2.5-7b-instruct-q3_k_m.gguf (작은 용량, 낮은 품질)
+```
+
+#### 폐쇄망으로 모델 전송
+
+```bash
+# 공개 네트워크에서 모델 다운로드 후
+# 폐쇄망으로 파일 복사하여 PVC에 업로드
 ```
 
 ### 4. 로컬 테스트
@@ -109,16 +121,20 @@ docker run --rm -it --gpus all \
 
 ## 빌드 포함 내용
 
-- llama.cpp (최신 버전)
+- llama.cpp (최신 버전, CUDA 지원)
 - CUDA 11.4 툴킷
-- 필요한 빌드 도구
-- Python3 및 pip
+- CMake 3.28.1
+- 필수 빌드 도구 (gcc, g++, git 등)
 
 ## 참고사항
 
-- GPU 메모리에 따라 `-ngl` (GPU 레이어 수) 조정 필요
+- **A100 GPU 최적화**: Compute Capability 8.0으로 빌드되어 A100에서 최적 성능 제공
+- **GPU 레이어 수**: A100 40GB 기준 `-ngl 99` 권장 (전체 레이어 GPU 사용)
+- **양자화 선택**:
+  - Q4_K_M (4-bit): 권장, 성능과 용량의 균형
+  - Q8_0 (8-bit): 높은 품질, 더 많은 VRAM 필요
 - OpenShift에서 GPU 사용을 위해 Node Feature Discovery 및 GPU Operator 설치 필요
-- 폐쇄망 환경에서는 이미지를 tar 파일로 전송 후 import
+- 폐쇄망 환경에서는 이미지와 모델을 tar 파일로 전송 후 import
 
 ## 문제 해결
 
