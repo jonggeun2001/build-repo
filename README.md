@@ -40,6 +40,8 @@ docker load -i llama-cpp.tar
 
 ### 2. OpenShift에서 실행
 
+**사전 준비**: PVC에 GGUF 모델 파일을 미리 업로드해야 합니다.
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -58,7 +60,7 @@ spec:
       containers:
       - name: llama-cpp
         image: ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470
-        command: ["/app/llama.cpp/build/bin/llama-server"]
+        command: ["llama-server"]
         args:
           - "-m"
           - "/app/models/qwen3-model.gguf"
@@ -79,40 +81,28 @@ spec:
       volumes:
       - name: model-storage
         persistentVolumeClaim:
-          claimName: qwen3-model-pvc
+          claimName: qwen3-model-pvc  # 모델 파일이 업로드된 PVC
 ```
 
 ### 3. 모델 파일 준비
 
 **중요**: 이 이미지는 사전 변환된 GGUF 모델 파일을 필요로 합니다.
 
-#### Qwen3 GGUF 모델 다운로드
-
-```bash
-# HuggingFace에서 GGUF 모델 다운로드
-wget https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf
-
-# 또는 다른 양자화 버전
-# - qwen2.5-7b-instruct-q8_0.gguf (높은 품질, 큰 용량)
-# - qwen2.5-7b-instruct-q4_k_m.gguf (균형, 권장)
-# - qwen2.5-7b-instruct-q3_k_m.gguf (작은 용량, 낮은 품질)
-```
-
-#### 폐쇄망으로 모델 전송
-
-```bash
-# 공개 네트워크에서 모델 다운로드 후
-# 폐쇄망으로 파일 복사하여 PVC에 업로드
-```
+- Qwen3 GGUF 모델을 외부에서 준비
+- PVC(PersistentVolumeClaim)에 모델 파일 업로드
+- 컨테이너 실행 시 `/app/models` 경로에 PVC 마운트
 
 ### 4. 로컬 테스트
 
+사전 준비된 GGUF 모델 파일을 마운트하여 테스트:
+
 ```bash
+# /path/to/models 디렉토리에 qwen3-model.gguf 파일이 있어야 함
 docker run --rm -it --gpus all \
   -p 8080:8080 \
   -v /path/to/models:/app/models \
   ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470 \
-  /app/llama.cpp/build/bin/llama-server \
+  llama-server \
   -m /app/models/qwen3-model.gguf \
   --host 0.0.0.0 \
   --port 8080 \
@@ -146,5 +136,5 @@ docker run --rm ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470 nvcc --versio
 ### llama.cpp 버전 확인
 ```bash
 docker run --rm ghcr.io/jonggeun2001/build-repo:cuda11.4-driver470 \
-  /app/llama.cpp/build/bin/llama-server --version
+  llama-server --version
 ```
