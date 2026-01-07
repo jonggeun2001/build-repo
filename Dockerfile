@@ -34,13 +34,17 @@ RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/lib
         -DCMAKE_CUDA_ARCHITECTURES="80" \
         -DCMAKE_BUILD_TYPE=Release && \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
-    cmake --build . --config Release -j$(nproc) && \
-    rm /usr/local/cuda/lib64/stubs/libcuda.so.1
+    cmake --build . --config Release -j$(nproc)
 
-# Collect all required shared libraries for runtime
+# Collect all required shared libraries for runtime (before removing stub!)
 RUN mkdir -p /app/runtime-libs && \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
     ldd /app/llama.cpp/build/bin/llama-server | grep "=> /" | awk '{print $3}' | \
-    xargs -I {} cp -v {} /app/runtime-libs/ || true
+    grep -v "libcuda.so" | \
+    xargs -I {} cp -L {} /app/runtime-libs/ 2>/dev/null || true
+
+# Now safe to remove stub
+RUN rm -f /usr/local/cuda/lib64/stubs/libcuda.so.1
 
 # ============================================
 # Stage 2: Runtime (CUDA runtime, much smaller)
@@ -51,8 +55,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y \
-    libcurl4-openssl-dev \
+    libcurl4 \
     libgomp1 \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
