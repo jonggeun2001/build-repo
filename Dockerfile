@@ -1,4 +1,4 @@
-# NVIDIA Driver 470 compatible (CUDA 11.4)
+# NVIDIA Driver 470 compatible (CUDA 11.4) for A100 GPU
 FROM nvidia/cuda:11.4.3-devel-ubuntu20.04
 
 # Set environment variables
@@ -7,10 +7,9 @@ ENV CUDA_HOME=/usr/local/cuda
 ENV PATH=${CUDA_HOME}/bin:${PATH}
 ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
 
-# Install dependencies
+# Install system dependencies and CMake 3.24+
 RUN apt-get update && apt-get install -y \
     build-essential \
-    cmake \
     git \
     wget \
     curl \
@@ -19,32 +18,47 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
+# Install latest CMake (llama.cpp requires 3.18+)
+RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.28.1/cmake-3.28.1-linux-x86_64.sh && \
+    chmod +x cmake-3.28.1-linux-x86_64.sh && \
+    ./cmake-3.28.1-linux-x86_64.sh --skip-license --prefix=/usr/local && \
+    rm cmake-3.28.1-linux-x86_64.sh
+
+# Install Python packages for model conversion (Qwen3 support)
+RUN pip3 install --no-cache-dir \
+    numpy \
+    torch \
+    transformers \
+    sentencepiece \
+    protobuf
+
 # Set working directory
 WORKDIR /app
 
-# Clone and build llama.cpp
-RUN git clone https://github.com/ggerganov/llama.cpp.git && \
-    cd llama.cpp && \
-    mkdir build && \
-    cd build && \
-    cmake .. -DLLAMA_CUBLAS=ON -DCMAKE_CUDA_ARCHITECTURES=native && \
+# Clone llama.cpp (separate layer for better caching)
+RUN git clone https://github.com/ggerganov/llama.cpp.git /app/llama.cpp
+
+# Build llama.cpp with CUDA support for A100 (compute capability 8.0)
+WORKDIR /app/llama.cpp
+RUN mkdir build && cd build && \
+    cmake .. \
+        -DLLAMA_CUDA=ON \
+        -DCMAKE_CUDA_ARCHITECTURES="80" \
+        -DCMAKE_BUILD_TYPE=Release && \
     cmake --build . --config Release -j$(nproc)
 
 # Create model directory
 RUN mkdir -p /app/models
 
-# Copy llama.cpp binaries to /app
-RUN cp -r /app/llama.cpp/build/bin/* /app/ || \
-    (cp /app/llama.cpp/build/llama-* /app/ && \
-     cp /app/llama.cpp/build/main /app/ 2>/dev/null || true && \
-     cp /app/llama.cpp/build/server /app/ 2>/dev/null || true)
-
-# Set the default command to run llama.cpp server
-WORKDIR /app
+# Set environment variables
 ENV LLAMA_CPP_PATH=/app/llama.cpp
+ENV PATH=/app/llama.cpp/build/bin:${PATH}
 
 # Expose default llama.cpp server port
 EXPOSE 8080
 
-# Default command (can be overridden)
-CMD ["/app/llama.cpp/build/bin/llama-server", "--help"]
+# Set working directory
+WORKDIR /app
+
+# Default command (can be overridden at runtime)
+CMD ["llama-server", "--help"]
