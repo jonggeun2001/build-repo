@@ -35,16 +35,16 @@ RUN git clone https://github.com/ggerganov/llama.cpp.git /app/llama.cpp
 # Build llama.cpp with CUDA support for A100 (compute capability 8.0)
 # Use CUDA stub library for building without GPU
 WORKDIR /app/llama.cpp
-RUN mkdir build && cd build && \
-    export CUDA_STUBS_DIR=/usr/local/cuda/lib64/stubs && \
+RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 && \
+    mkdir build && cd build && \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
     cmake .. \
         -DLLAMA_CUDA=ON \
         -DCMAKE_CUDA_ARCHITECTURES="80" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_EXE_LINKER_FLAGS="-L${CUDA_STUBS_DIR}" \
-        -DCMAKE_SHARED_LINKER_FLAGS="-L${CUDA_STUBS_DIR}" && \
-    LD_LIBRARY_PATH=${CUDA_STUBS_DIR}:${LD_LIBRARY_PATH} \
-    cmake --build . --config Release -j$(nproc)
+        -DCMAKE_BUILD_TYPE=Release && \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH} \
+    cmake --build . --config Release -j$(nproc) && \
+    rm /usr/local/cuda/lib64/stubs/libcuda.so.1
 
 # Create model directory
 RUN mkdir -p /app/models
