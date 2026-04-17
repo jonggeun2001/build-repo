@@ -5,6 +5,11 @@ FROM nvidia/cuda:11.4.3-devel-ubuntu20.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Ubuntu 20.04 base images still point APT at plain HTTP mirrors.
+# GitHub-hosted runners have been timing out on port 80, while HTTPS works.
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g' /etc/apt/sources.list && \
+    printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99github-actions-network
+
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -52,6 +57,10 @@ RUN rm -f /usr/local/cuda/lib64/stubs/libcuda.so.1
 FROM nvidia/cuda:11.4.3-runtime-ubuntu20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+# Keep runtime stage on the same HTTPS APT mirror configuration.
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g' /etc/apt/sources.list && \
+    printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99github-actions-network
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y \
